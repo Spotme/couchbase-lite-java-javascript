@@ -21,7 +21,7 @@ dependencies {
     // because of a "compile" directive to explicitly include the jar.
     testCompile fileTree(dir: 'libs', include: 'td_collator_so.jar')
 
-    compile 'org.mozilla:rhino:1.7R3'
+    compile 'org.mozilla:rhino:1.7R4'
 
     compile project(':cbl:java-core')
 
