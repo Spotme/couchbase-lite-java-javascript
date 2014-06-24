@@ -6,14 +6,18 @@ import com.couchbase.lite.FunctionContainer;
 import com.couchbase.lite.router.URLConnection;
 import com.couchbase.lite.util.Log;
 
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Scriptable;
 
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +43,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 	protected final Scriptable mFunctions;
 
 	// request object
-	protected String mRequest;
+	protected Map<String, Object> mRequestProperties;
 
 	// response contents
 	protected final StringBuilder mResponse = new StringBuilder();
@@ -77,10 +81,34 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 	 * Builds the request object from the connection, which is then passed into list and show functions.
 	 */
 	public void buildRequestObject() {
+
 		final String requestMethod = mConnection.getRequestMethod();
+		final String[] path = mConnection.getURL().getPath().split("/");
 
+		final Map<String, Object> queryParams = new HashMap<String, Object>();
 
-		return;
+		try {
+			final List<NameValuePair> items = URLEncodedUtils.parse(mConnection.getURL().toURI(), "UTF-8");
+
+			for (final NameValuePair pair : items) {
+				queryParams.put(pair.getName(), pair.getValue());
+			}
+		} catch (URISyntaxException ex) { } // do nothing
+
+		final Map<String, Object> requestHeaders = new HashMap<String, Object>();
+
+		for (final Map.Entry<String, List<String>> entry : mConnection.getRequestProperties().entrySet()) {
+			try { requestHeaders.put(entry.getKey(), entry.getValue().get(0)); } catch (Exception e) { } // nothing
+		}
+
+		final Map<String, Object> requestObj = new HashMap<String, Object>();
+
+		requestObj.put("method", requestMethod);
+		requestObj.put("path", path);
+		requestObj.put("query", queryParams);
+		requestObj.put("headers", requestHeaders);
+
+		mRequestProperties = requestObj;
 //{
 //	"info": {
 //	"db_name": "test_suite_db",
@@ -123,6 +151,15 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 //}
 //}
 
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public Map<String, Object> getRequestProperties() {
+		buildRequestObject();
+
+		return mRequestProperties;
 	}
 
 	/**
@@ -187,9 +224,8 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 	/**
 	 * @param conn The connection where to set the response
 	 */
-	public void setConnection(final URLConnection conn) {
+	public void setRequestObject(final URLConnection conn) {
 		mConnection = conn;
-		buildRequestObject();
 	}
 
 	/**
@@ -204,7 +240,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 	/**
 	 * @inheritDoc
 	 */
-	public List<Map<String, Object>> list(final Map<String, Object> head, final Map<String, Object> request) {
+	public List<Map<String, Object>> list(final Map<String, Object> head, final Map<String, Object> requestProperties) {
 		unregisterFunctions(mListFunctions);
 		registerFunctions(mListFunctions);
 
@@ -216,7 +252,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler, FunctionCon
 	/**
 	 * @inheritDoc
 	 */
-	public Object show(Map<String, Object> document, Map<String, Object> request) {
+	public Object show(Map<String, Object> document, Map<String, Object> requestProperties) {
 		unregisterFunctions(mShowFunctions);
 		registerFunctions(mShowFunctions);
 
