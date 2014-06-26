@@ -12,6 +12,8 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.elasticsearch.script.javascript.support.NativeList;
+import org.elasticsearch.script.javascript.support.NativeMap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -19,6 +21,7 @@ import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.WrapFactory;
 
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
@@ -83,6 +86,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 		// Android dex won't allow us to create our own classes
 		mContext.setOptimizationLevel(-1);
+		mContext.setWrapFactory(new CustomWrapFactory());
 
 		mScope = mContext.initStandardObjects();
 		mFunctions.setParentScope(mScope);
@@ -174,7 +178,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	 * @inheritDoc
 	 */
 	public Map<String, Object> getRequestProperties() {
-		buildRequestObject();
+		if (mRequestProperties == null) buildRequestObject();
 
 		return mRequestProperties;
 	}
@@ -252,6 +256,8 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	public String list(final String listName, final Map<String, Object> head) throws CouchbaseLiteException {
 		if (mDesignDoc == null) return null;
 
+		final Map<String, Object> requestProperties = getRequestProperties();
+
 		String listSrc = "";
 
 		try {
@@ -262,12 +268,9 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 			listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
 
-			final String headString = mMapper.writeValueAsString(head);
-			final String requestString = mMapper.writeValueAsString(getRequestProperties());
-
 			// compile the list function and call it
 			final Function listFunc = mContext.compileFunction(mScope, listSrc, listName, 1, null);
-			mContext.callFunctionWithContinuations(listFunc, mScope, new Object[] { headString, requestString });
+			mContext.callFunctionWithContinuations(listFunc, mScope, new Object[] { head, requestProperties });
 
 			Context.exit();
 
@@ -308,26 +311,25 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	public String show(final String showName, final Map<String, Object> document) throws CouchbaseLiteException {
 		if (mDesignDoc == null) return null;
 
-		unregisterFunctions(mShowFunctions);
-		registerFunctions(mShowFunctions);
+		final Map<String, Object> requestProperties = getRequestProperties();
 
 		String showSrc = "";
 
 		try {
 			mContext.enter();
 
-			showSrc = (String) ((Map<String, Object>) mDesignDoc.get("shows")).get(showName);
+			unregisterFunctions(mShowFunctions);
+			registerFunctions(mShowFunctions);
 
-			final String documentString = mMapper.writeValueAsString(document);
-			final String requestString = mMapper.writeValueAsString(getRequestProperties());
+			showSrc = (String) ((Map<String, Object>) mDesignDoc.get("shows")).get(showName);
 
 			// compile the show function and call it
 			final Function showFunc = mContext.compileFunction(mScope, showSrc, showName, 1, null);
-			showFunc.call(mContext, mScope, mScope, new Object[] { documentString, requestString });
+			final Object result = showFunc.call(mContext, mScope, mScope, new Object[] { document, requestProperties });
 
 			Context.exit();
 
-			return mResponse.toString();
+			return mResponse.append(mMapper.writeValueAsString(result)).toString();
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + showSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
@@ -405,6 +407,27 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 */
 		public String toJSON(final Object obj) {
 			return (String) NativeJSON.stringify(mContext, mScope, obj, null, null);
+		}
+	}
+
+	/**
+	 * Wrap Factory for Rhino Script Engine
+	 */
+	class CustomWrapFactory extends WrapFactory {
+
+		public CustomWrapFactory() {
+			setJavaPrimitiveWrap(false); // RingoJS does that..., claims its annoying...
+		}
+
+		@Override
+		public Scriptable wrapAsJavaObject(Context cx, Scriptable scope, Object javaObject, Class staticType) {
+			if (javaObject instanceof Map) {
+				return new NativeMap(scope, (Map) javaObject);
+			} else if (javaObject instanceof List) {
+				return new NativeList(scope, (List<Object>)javaObject);
+			}
+
+			return super.wrapAsJavaObject(cx, scope, javaObject, staticType);
 		}
 	}
 }
