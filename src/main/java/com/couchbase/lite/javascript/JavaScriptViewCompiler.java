@@ -126,15 +126,8 @@ class ViewMapBlockRhino implements Mapper {
             // that array will not be wrapped correctly but you'll get the plain 
             // java.util.ArrayList instead - and then an error.
             try {
-
-//                mapper.getSerializationConfig().with(SerializationConfig.Feature)
                 // One thing that CouchDB does is replace these whitespace/newlines values with null-bytes
                 final String json = mapper.writeValueAsString(document).replace("\\u2028", "\0");
-
-//                while ((t = json.indexOf('\u2028')) > 0) {
-//                    json = json.substring(0, t-1) + "\\n" + json.substring(t+1, json.length());
-//                }
-
                 final String mapInvocation = "map(" + json + ");";
 
                 ctx.evaluateString(globalScope, mapInvocation, "map invocation", 1, null);

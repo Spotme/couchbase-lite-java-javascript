@@ -50,7 +50,7 @@ public class JavaScriptDesignDocument extends LiteJavascriptTestCase {
     	super.setUp();
 
         // Register the JavaScript view compiler
-        View.setCompiler(new JavaScriptViewCompiler());
+        View.setViewCompiler(new JavaScriptViewCompiler());
         
         send("PUT", "/rhinodb", Status.CREATED, null);
 	}
