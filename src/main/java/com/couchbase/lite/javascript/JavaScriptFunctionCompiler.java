@@ -22,8 +22,19 @@ import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrapFactory;
+import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
+import org.mozilla.javascript.commonjs.module.Require;
+import org.mozilla.javascript.commonjs.module.RequireBuilder;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSource;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProviderBase;
+import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,9 +63,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	// The design doc containing the list and show functions
 	protected Map<String, Object> mDesignDoc;
 
-	// Function container
-	protected JavaScriptFunctionContainer mFunctions = new JavaScriptFunctionContainer();
-
 	protected final ObjectMapper mMapper = new ObjectMapper();
 
 	// request object
@@ -64,16 +72,16 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	protected final StringBuilder mResponse = new StringBuilder();
 
 	// global shared scope with initialized functions
-	protected final Scriptable mScope;
+	protected final ScriptableObject mScope;
 
 	// result of the view this request called on, if any
 	protected List<Map<String, Object>> mViewResult = new ArrayList<Map<String, Object>>();
 
 	// JS query server functions
 	protected static final List<String> mGlobalFunctions = Arrays.asList("isArray", "log", "sum", "start");
-	protected static final List<String> mMapFunctions = Arrays.asList("require", "emit");
-	protected static final List<String> mListFunctions = Arrays.asList("require", "getRow", "send"); //, "provides", "registerType");
-	protected static final List<String> mShowFunctions = Arrays.asList("require"); //, "provides", "registerType");
+	protected static final List<String> mMapFunctions = Arrays.asList("emit");
+	protected static final List<String> mListFunctions = Arrays.asList("getRow", "send"); //, "provides", "registerType");
+	protected static final List<String> mShowFunctions = Arrays.asList(); //, "provides", "registerType");
 	protected static final List<String> mReduceFunctions = Arrays.asList();
 
 	protected static final List<List<String>> mAllFunctions = Arrays.asList(mMapFunctions, mListFunctions, mShowFunctions, mReduceFunctions);
@@ -88,8 +96,11 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		mContext.setOptimizationLevel(-1);
 		mContext.setWrapFactory(new CustomWrapFactory());
 
-		mScope = mContext.initStandardObjects();
-		mFunctions.setParentScope(mScope);
+		final Scriptable globalScope = mContext.initStandardObjects();
+
+		mScope = new JavaScriptFunctionContainer();
+		mScope.setParentScope(globalScope);
+		mScope.setPrototype(globalScope);
 
 		registerFunctions(mGlobalFunctions);
 
@@ -128,6 +139,14 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		requestObj.put("path", path);
 		requestObj.put("query", queryParams);
 		requestObj.put("headers", requestHeaders);
+
+		if (mConnection.getRequestMethod().equalsIgnoreCase("POST")) {
+			try {
+				final Map<String, Object> postData = mMapper.readValue(mConnection.getRequestInputStream(), Map.class);
+				requestObj.put("body", postData);
+			} catch (IOException e) {
+			} // Ignore
+		}
 
 		mRequestProperties = requestObj;
 
@@ -193,7 +212,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		try {
 			for (final Method method : JavaScriptFunctionContainer.class.getDeclaredMethods()) {
 				if (method.getName().equals(name)) {
-					final FunctionObject fn = new FunctionObject(name, method, mFunctions);
+					final FunctionObject fn = new FunctionObject(name, method, mScope);
 					mScope.put(name, mScope, fn);
 
 					break;
@@ -257,6 +276,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		if (mDesignDoc == null) return null;
 
 		final Map<String, Object> requestProperties = getRequestProperties();
+		final WrapFactory wrapper = mContext.getWrapFactory();
 
 		String listSrc = "";
 
@@ -266,11 +286,35 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 			unregisterFunctions(mListFunctions);
 			registerFunctions(mListFunctions);
 
+			final Scriptable newScope = mContext.newObject(mScope);
+
+			newScope.setPrototype(mScope);
+			newScope.setParentScope(mScope);
+
+			try {
+				final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider();
+				final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
+				final RequireBuilder builder = new RequireBuilder();
+
+				builder.setModuleScriptProvider(scriptProvider);
+
+				final Require require = builder.createRequire(mContext, mScope);
+
+				require.setParentScope(mScope);
+				require.setPrototype(mScope);
+				require.install(newScope);
+			} catch (Exception e) {
+				Log.e(Database.TAG, "Unable to load require function!", e);
+			} // ignore
+
 			listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
 
 			// compile the list function and call it
-			final Function listFunc = mContext.compileFunction(mScope, listSrc, listName, 1, null);
-			mContext.callFunctionWithContinuations(listFunc, mScope, new Object[] { head, requestProperties });
+			final Function listFunc = mContext.compileFunction(newScope, listSrc, listName, 1, null);
+			listFunc.call(mContext, newScope, newScope, new Object[] {
+					wrapper.wrapNewObject(mContext, newScope, head),
+					wrapper.wrapNewObject(mContext, newScope, requestProperties)
+			});
 
 			Context.exit();
 
@@ -317,6 +361,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 		try {
 			mContext.enter();
+			mContext.setWrapFactory(new CustomWrapFactory());
 
 			unregisterFunctions(mShowFunctions);
 			registerFunctions(mShowFunctions);
@@ -353,8 +398,10 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 * @return The next object in the current collection.
 		 */
 		public Object getRow() {
+			final WrapFactory wrapper = mContext.getWrapFactory();
+
 			return ++mCurrentListIndex < mItems.size()
-					? mItems.get(mCurrentListIndex)
+					? wrapper.wrapNewObject(mContext, mScope, mItems.get(mCurrentListIndex))
 					: null;
 		}
 
@@ -387,14 +434,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		/**
 		 * @inheritDoc
 		 */
-		public String require(final String path) {
-			// TODO implement
-			return "";
-		}
-
-		/**
-		 * @inheritDoc
-		 */
 		public void send(final String contents) {
 			mResponse.append(contents);
 			mResponse.append('\n');
@@ -422,12 +461,55 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		@Override
 		public Scriptable wrapAsJavaObject(Context cx, Scriptable scope, Object javaObject, Class staticType) {
 			if (javaObject instanceof Map) {
-				return new NativeMap(scope, (Map) javaObject);
+				final Map<Object, Object> copyMap = new HashMap<Object, Object>();
+
+				for (Map.Entry<Object, Object> entry : ((Map<Object, Object>) javaObject).entrySet()) {
+					copyMap.put(
+							wrapAsJavaObject(cx, scope, entry.getKey(), entry.getKey().getClass()),
+							wrapAsJavaObject(cx, scope, entry.getValue(), entry.getValue().getClass())
+					);
+				}
+
+				return new NativeMap(scope, copyMap);
 			} else if (javaObject instanceof List) {
-				return new NativeList(scope, (List<Object>)javaObject);
+				final List<Object> copyList = new ArrayList<Object>();
+
+				for (final Object obj : (List<Object>) javaObject) {
+					copyList.add(wrapAsJavaObject(cx, scope, obj, obj.getClass()));
+				}
+
+				return new NativeList(scope, copyList);
 			}
 
 			return super.wrapAsJavaObject(cx, scope, javaObject, staticType);
 		}
 	}
+
+	class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
+		@Override
+		public ModuleSource loadSource(String moduleId, Scriptable paths, Object validator) throws IOException, URISyntaxException {
+			return getModule(moduleId, validator);
+		}
+
+		@Override
+		protected ModuleSource loadFromUri(URI uri, URI base, Object validator) throws IOException, URISyntaxException {
+			return getModule(uri.toString(), validator);
+		}
+
+		protected ModuleSource getModule(String moduleId, Object validator) throws IOException {
+			try {
+				final String[] parts = moduleId.split("/");
+
+				Object currentObject = mDesignDoc;
+				for (final String part : parts) {
+					currentObject = ((Map<String, Object>) currentObject).get(part);
+				}
+
+				final Reader srcReader = new StringReader((String) currentObject);
+				return new ModuleSource(srcReader, null, new URI(moduleId).resolve(""), new URI(moduleId), validator);
+			} catch (Exception e) {
+				throw new IOException(e);
+			}
+		}
+	};
 }
