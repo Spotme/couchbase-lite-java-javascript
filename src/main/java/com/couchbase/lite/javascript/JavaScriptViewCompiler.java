@@ -6,9 +6,9 @@ import com.couchbase.lite.Mapper;
 import com.couchbase.lite.Reducer;
 import com.couchbase.lite.ViewCompiler;
 import com.couchbase.lite.util.Log;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.elasticsearch.script.javascript.support.NativeList;
 import org.elasticsearch.script.javascript.support.NativeMap;
 import org.mozilla.javascript.Context;
