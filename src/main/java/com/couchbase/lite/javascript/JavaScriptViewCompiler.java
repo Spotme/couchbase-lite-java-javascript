@@ -9,8 +9,6 @@ import com.couchbase.lite.util.Log;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.elasticsearch.script.javascript.support.NativeList;
-import org.elasticsearch.script.javascript.support.NativeMap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeArray;
@@ -41,27 +39,6 @@ public class JavaScriptViewCompiler implements ViewCompiler {
 
         throw new IllegalArgumentException(language + " is not supported");
 	}
-}
-
-/**
- * Wrap Factory for Rhino Script Engine
- */
-class CustomWrapFactory extends WrapFactory {
-
-    public CustomWrapFactory() {
-        setJavaPrimitiveWrap(false); // RingoJS does that..., claims its annoying...
-    }
-
-	@Override
-    public Scriptable wrapAsJavaObject(Context cx, Scriptable scope, Object javaObject, Class staticType) {
-        if (javaObject instanceof Map) {
-            return new NativeMap(scope, (Map) javaObject);
-        } else if (javaObject instanceof List) {
-            return new NativeList(scope, (List<Object>)javaObject);
-        }
-
-        return super.wrapAsJavaObject(cx, scope, javaObject, staticType);
-    }
 }
 
 // REFACT: Extract superview for both the map and reduce blocks as they do pretty much the same thing

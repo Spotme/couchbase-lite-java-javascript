@@ -18,7 +18,9 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
+import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
+import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrapFactory;
@@ -33,6 +35,7 @@ import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptPr
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -74,9 +77,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	// global shared scope with initialized functions
 	protected final ScriptableObject mScope;
 
-	// result of the view this request called on, if any
-	protected List<Map<String, Object>> mViewResult = new ArrayList<Map<String, Object>>();
-
 	// JS query server functions
 	protected static final List<String> mGlobalFunctions = Arrays.asList("isArray", "log", "sum", "start");
 	protected static final List<String> mMapFunctions = Arrays.asList("emit");
@@ -96,15 +96,11 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		mContext.setOptimizationLevel(-1);
 		mContext.setWrapFactory(new CustomWrapFactory());
 
-		final Scriptable globalScope = mContext.initStandardObjects();
-
-		mScope = new JavaScriptFunctionContainer();
-		mScope.setParentScope(globalScope);
-		mScope.setPrototype(globalScope);
+        mScope = new JavaScriptFunctionContainer(Context.getCurrentContext());
 
 		registerFunctions(mGlobalFunctions);
 
-		mMapper.getJsonFactory().enable(JsonGenerator.Feature.ESCAPE_NON_ASCII);
+		mMapper.getFactory().enable(JsonGenerator.Feature.ESCAPE_NON_ASCII);
 
 		mContext.exit();
 	}
@@ -273,52 +269,52 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	 * @inheritDoc
 	 */
 	public String list(final String listName, final Map<String, Object> head) throws CouchbaseLiteException {
-		if (mDesignDoc == null) return null;
+        if (mDesignDoc == null) return null;
 
-		final Map<String, Object> requestProperties = getRequestProperties();
-		final WrapFactory wrapper = mContext.getWrapFactory();
+        final Map<String, Object> requestProperties = getRequestProperties();
+        final WrapFactory wrapper = mContext.getWrapFactory();
 
-		String listSrc = "";
+        String listSrc = "";
 
-		try {
-			mContext.enter();
+        try {
+            mContext.enter();
 
-			unregisterFunctions(mListFunctions);
-			registerFunctions(mListFunctions);
+            unregisterFunctions(mListFunctions);
+            registerFunctions(mListFunctions);
 
-			final Scriptable newScope = mContext.newObject(mScope);
+            final Scriptable newScope = mContext.newObject(mScope);
 
-			newScope.setPrototype(mScope);
-			newScope.setParentScope(mScope);
+            newScope.setPrototype(mScope);
+            newScope.setParentScope(mScope);
 
-			try {
-				final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider();
-				final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
-				final RequireBuilder builder = new RequireBuilder();
+            try {
+                final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider();
+                final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
+                final RequireBuilder builder = new RequireBuilder();
 
-				builder.setModuleScriptProvider(scriptProvider);
+                builder.setModuleScriptProvider(scriptProvider);
 
-				final Require require = builder.createRequire(mContext, mScope);
+                final Require require = builder.createRequire(mContext, mScope);
 
-				require.setParentScope(mScope);
-				require.setPrototype(mScope);
-				require.install(newScope);
-			} catch (Exception e) {
-				Log.e(Database.TAG, "Unable to load require function!", e);
-			} // ignore
+                require.setParentScope(mScope);
+                require.setPrototype(mScope);
+                require.install(newScope);
+            } catch (Exception e) {
+                Log.e(Database.TAG, "Unable to load require function!", e);
+            }
 
-			listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
+            listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
 
-			// compile the list function and call it
-			final Function listFunc = mContext.compileFunction(newScope, listSrc, listName, 1, null);
-			listFunc.call(mContext, newScope, newScope, new Object[] {
-					wrapper.wrapNewObject(mContext, newScope, head),
-					wrapper.wrapNewObject(mContext, newScope, requestProperties)
-			});
+            // compile the list function and call it
+            final Function listFunc = mContext.compileFunction(newScope, listSrc, listName, 1, null);
+            listFunc.call(mContext, newScope, newScope, new Object[] {
+                    wrapper.wrapNewObject(mContext, mScope, head),
+                    wrapper.wrapNewObject(mContext, mScope, requestProperties)
+            });
 
-			Context.exit();
+            Context.exit();
 
-			return mResponse.toString();
+            return mResponse.toString();
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
@@ -385,12 +381,18 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	}
 
 	///////////////////////////////////// FunctionContainer
-	class JavaScriptFunctionContainer extends ScriptableObject implements FunctionContainer {
+    class JavaScriptFunctionContainer extends ImporterTopLevel {
 
-		@Override
-		public String getClassName() {
-			return JavaScriptFunctionContainer.class.getSimpleName();
-		}
+        public JavaScriptFunctionContainer() { }
+
+        public JavaScriptFunctionContainer(Context cx) {
+            super(cx);
+        }
+
+        public JavaScriptFunctionContainer(Context cx, boolean sealed)
+        {
+            super(cx, sealed);
+        }
 
 		/**
 		 * Implements the equivalent of the {@code getRow()} function in list functions
@@ -436,7 +438,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 */
 		public void send(final String contents) {
 			mResponse.append(contents);
-			mResponse.append('\n');
 		}
 
 		/**
@@ -449,41 +450,30 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		}
 	}
 
-	/**
-	 * Wrap Factory for Rhino Script Engine
-	 */
-	class CustomWrapFactory extends WrapFactory {
+    /**
+     * Handles functions with a fixed scope (the top-level one)
+     */
+    private static class FixedScopeFunctionObject extends FunctionObject {
 
-		public CustomWrapFactory() {
-			setJavaPrimitiveWrap(false); // RingoJS does that..., claims its annoying...
-		}
+        private final Scriptable mFixedScope;
 
-		@Override
-		public Scriptable wrapAsJavaObject(Context cx, Scriptable scope, Object javaObject, Class staticType) {
-			if (javaObject instanceof Map) {
-				final Map<Object, Object> copyMap = new HashMap<Object, Object>();
+        private FixedScopeFunctionObject(String name, Member methodOrConstructor, Scriptable parentScope) {
+            super(name, methodOrConstructor, parentScope);
 
-				for (Map.Entry<Object, Object> entry : ((Map<Object, Object>) javaObject).entrySet()) {
-					copyMap.put(
-							wrapAsJavaObject(cx, scope, entry.getKey(), entry.getKey().getClass()),
-							wrapAsJavaObject(cx, scope, entry.getValue(), entry.getValue().getClass())
-					);
-				}
+            mFixedScope = null;
+        }
 
-				return new NativeMap(scope, copyMap);
-			} else if (javaObject instanceof List) {
-				final List<Object> copyList = new ArrayList<Object>();
+        private FixedScopeFunctionObject(String name, Member methodOrConstructor, Scriptable parentScope, Scriptable fixedScope) {
+            super(name, methodOrConstructor, parentScope);
 
-				for (final Object obj : (List<Object>) javaObject) {
-					copyList.add(wrapAsJavaObject(cx, scope, obj, obj.getClass()));
-				}
+            mFixedScope = fixedScope;
+        }
 
-				return new NativeList(scope, copyList);
-			}
-
-			return super.wrapAsJavaObject(cx, scope, javaObject, staticType);
-		}
-	}
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            return super.call(cx, scope, mFixedScope, args);
+        }
+    }
 
 	class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
 		@Override
