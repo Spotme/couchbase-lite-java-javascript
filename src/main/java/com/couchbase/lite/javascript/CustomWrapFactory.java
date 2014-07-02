@@ -16,7 +16,10 @@ import java.util.Map;
  */
 class CustomWrapFactory extends WrapFactory {
 
-    public CustomWrapFactory() {
+    private final Scriptable mScope;
+
+    public CustomWrapFactory(final Scriptable scope) {
+        mScope = scope;
         setJavaPrimitiveWrap(false); // RingoJS does that..., claims its annoying...
     }
 
@@ -30,7 +33,7 @@ class CustomWrapFactory extends WrapFactory {
                 final Class<?> valueClass = (entry.getValue() != null) ? entry.getValue().getClass() : null;
 
                 final String nativeKey = entry.getKey();
-                final Object nativeValue = wrap(cx, scope, entry.getValue(), valueClass);
+                final Object nativeValue = wrap(cx, mScope, entry.getValue(), valueClass);
 
                 nativeObject.defineProperty(nativeKey, nativeValue, NativeObject.READONLY);
             }
@@ -40,7 +43,7 @@ class CustomWrapFactory extends WrapFactory {
             final List<Object> copyList = new ArrayList<Object>();
 
             for (final Object obj : (List<Object>) javaObject) {
-                copyList.add(wrapAsJavaObject(cx, scope, obj, obj.getClass()));
+                copyList.add(wrapAsJavaObject(cx, mScope, obj, obj.getClass()));
             }
 
             return new NativeList(scope, copyList);
@@ -48,6 +51,6 @@ class CustomWrapFactory extends WrapFactory {
             return null;
         }
 
-        return super.wrapAsJavaObject(cx, scope, javaObject, staticType);
+        return super.wrapAsJavaObject(cx, mScope, javaObject, staticType);
     }
 }

@@ -3,7 +3,6 @@ package com.couchbase.lite.javascript;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.FunctionCompiler;
-import com.couchbase.lite.FunctionContainer;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.router.URLConnection;
 import com.couchbase.lite.util.Log;
@@ -12,15 +11,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
-import org.elasticsearch.script.javascript.support.NativeList;
-import org.elasticsearch.script.javascript.support.NativeMap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
-import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrapFactory;
@@ -39,7 +35,6 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -94,9 +89,10 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 		// Android dex won't allow us to create our own classes
 		mContext.setOptimizationLevel(-1);
-		mContext.setWrapFactory(new CustomWrapFactory());
 
         mScope = new JavaScriptFunctionContainer(Context.getCurrentContext());
+
+		mContext.setWrapFactory(new CustomWrapFactory(mScope));
 
 		registerFunctions(mGlobalFunctions);
 
@@ -208,7 +204,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		try {
 			for (final Method method : JavaScriptFunctionContainer.class.getDeclaredMethods()) {
 				if (method.getName().equals(name)) {
-					final FunctionObject fn = new FunctionObject(name, method, mScope);
+					final FunctionObject fn = new FixedScopeFunctionObject(name, method, mScope, mScope);
 					mScope.put(name, mScope, fn);
 
 					break;
@@ -282,11 +278,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             unregisterFunctions(mListFunctions);
             registerFunctions(mListFunctions);
 
-            final Scriptable newScope = mContext.newObject(mScope);
-
-            newScope.setPrototype(mScope);
-            newScope.setParentScope(mScope);
-
             try {
                 final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider();
                 final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
@@ -298,7 +289,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
                 require.setParentScope(mScope);
                 require.setPrototype(mScope);
-                require.install(newScope);
+                require.install(mScope);
             } catch (Exception e) {
                 Log.e(Database.TAG, "Unable to load require function!", e);
             }
@@ -306,15 +297,15 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
 
             // compile the list function and call it
-            final Function listFunc = mContext.compileFunction(newScope, listSrc, listName, 1, null);
-            listFunc.call(mContext, newScope, newScope, new Object[] {
+            final Function listFunc = mContext.compileFunction(mScope, listSrc, listName, 1, null);
+            listFunc.call(mContext, mScope, mScope, new Object[] {
                     wrapper.wrapNewObject(mContext, mScope, head),
                     wrapper.wrapNewObject(mContext, mScope, requestProperties)
             });
 
             Context.exit();
 
-            return mResponse.toString();
+            return mResponse.toString() + "\n";
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
@@ -357,7 +348,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 		try {
 			mContext.enter();
-			mContext.setWrapFactory(new CustomWrapFactory());
 
 			unregisterFunctions(mShowFunctions);
 			registerFunctions(mShowFunctions);
@@ -456,12 +446,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
     private static class FixedScopeFunctionObject extends FunctionObject {
 
         private final Scriptable mFixedScope;
-
-        private FixedScopeFunctionObject(String name, Member methodOrConstructor, Scriptable parentScope) {
-            super(name, methodOrConstructor, parentScope);
-
-            mFixedScope = null;
-        }
 
         private FixedScopeFunctionObject(String name, Member methodOrConstructor, Scriptable parentScope, Scriptable fixedScope) {
             super(name, methodOrConstructor, parentScope);

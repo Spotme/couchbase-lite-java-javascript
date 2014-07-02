@@ -49,22 +49,26 @@ class ViewMapBlockRhino implements Mapper {
     private final Scriptable globalScope;
     private final Script placeHolder;
 
-    private static final WrapFactory wrapFactory = new CustomWrapFactory();
+    private final WrapFactory wrapFactory;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     public ViewMapBlockRhino(String src) {
         mapSrc = src;
 
-        mapper.getJsonFactory().enable(JsonGenerator.Feature.ESCAPE_NON_ASCII);
+        mapper.getFactory().enable(JsonGenerator.Feature.ESCAPE_NON_ASCII);
 
         final Context ctx = Context.enter();
 
-        try {
-            // Android dex won't allow us to create our own classes
-            ctx.setOptimizationLevel(-1);
-            ctx.setWrapFactory(wrapFactory);
-            globalScope = ctx.initStandardObjects(null, true);
+        // Android dex won't allow us to create our own classes
+        ctx.setOptimizationLevel(-1);
 
+        globalScope = ctx.initStandardObjects(null, true);
+        wrapFactory = new CustomWrapFactory(globalScope);
+
+        ctx.setWrapFactory(wrapFactory);
+
+
+        try {
             // create a place to hold results
             final String resultArray = "var map_results = [];";
             placeHolder = ctx.compileString(resultArray, "placeHolder", 1, null);
@@ -145,16 +149,20 @@ class ViewReduceBlockRhino implements Reducer {
 
     private final Scriptable globalScope;
 
-    private static final WrapFactory wrapFactory = new CustomWrapFactory();
+    private final WrapFactory wrapFactory;
 
     public ViewReduceBlockRhino(String src) {
-        Context ctx = Context.enter();
+        final Context ctx = Context.enter();
+
+        // Android dex won't allow us to create our own classes
+        ctx.setOptimizationLevel(-1);
+
+        globalScope = ctx.initStandardObjects(null, true);
+        wrapFactory = new CustomWrapFactory(globalScope);
+
+        ctx.setWrapFactory(wrapFactory);
+
         try {
-            ctx.setOptimizationLevel(-1);
-            ctx.setWrapFactory(wrapFactory);
-
-            globalScope = ctx.initStandardObjects(null, true);
-
             // register the reduce function
             final String reduceSrc = "var reduce = " + src + ";";
             ctx.evaluateString(globalScope, reduceSrc, "reduce", 1, null);
