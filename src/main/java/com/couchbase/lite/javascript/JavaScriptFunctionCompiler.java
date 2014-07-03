@@ -402,15 +402,13 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             if (mCurrentListIndex < mItems.size()   ) {
                 Object item = mItems.get(mCurrentListIndex);
                 row = wrapper.wrapNewObject(mContext, mScope, item);
+                //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
             } else {
                 row = mContext.getUndefinedValue();
+                //Log.d(Database.TAG, mCurrentListIndex + ": " +  row.toString());
             }
-            Log.d(Database.TAG, mCurrentListIndex + ": " + row.toString());
-            return row;
 
-//			return ++mCurrentListIndex < mItems.size()
-//					? wrapper.wrapNewObject(mContext, mScope, mItems.get(mCurrentListIndex))
-//					: null;
+            return row;
 		}
 
 		/**
