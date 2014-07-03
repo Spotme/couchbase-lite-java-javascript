@@ -1,15 +1,32 @@
 package com.couchbase.lite.javascript;
 
-import org.elasticsearch.script.javascript.support.NativeList;
-import org.elasticsearch.script.javascript.support.NativeMap;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.NativeArray;
+//import org.mozilla.javascript.NativeJavaArray;
 import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.WrapFactory;
 
-import java.util.ArrayList;
+
+import java.lang.reflect.Array;
 import java.util.List;
 import java.util.Map;
+
+//class WowNativeJavaArray extends NativeJavaArray
+//{
+//    public WowNativeJavaArray(Scriptable scope, Object array) {
+//        super(scope, array);
+//    }
+//
+//    @Override
+//    public Object get(String id, Scriptable start) {
+//        if (id.equals("toJSON")) {
+//            return "xxx";
+//        }
+//        return super.get(id, start);
+//    }
+//}
+
 
 /**
  * Wrap Factory for Rhino Script Engine
@@ -29,28 +46,36 @@ class CustomWrapFactory extends WrapFactory {
             final NativeObject nativeObject = new NativeObject();
 
             for (Map.Entry<String, Object> entry : ((Map<String, Object>) javaObject).entrySet()) {
+                final String key = entry.getKey();
+                final Object value = entry.getValue();
+                final Class<?> valueClass = (value != null) ? value.getClass() : null;
 
-                final Class<?> valueClass = (entry.getValue() != null) ? entry.getValue().getClass() : null;
-
-                final String nativeKey = entry.getKey();
-                final Object nativeValue = wrap(cx, mScope, entry.getValue(), valueClass);
+                final String nativeKey = key;//entry.getKey();
+                final Object nativeValue = wrap(cx, scope, value, valueClass);
 
                 nativeObject.defineProperty(nativeKey, nativeValue, NativeObject.READONLY);
             }
 
-            return new NativeMap(scope, nativeObject);
-        } else if (javaObject instanceof List) {
-            final List<Object> copyList = new ArrayList<Object>();
+            return nativeObject;
+        } else if (javaObject instanceof List || javaObject instanceof Array) {
+            final NativeArray copyList = new NativeArray(((List) javaObject).size());
 
+            int i = 0;
             for (final Object obj : (List<Object>) javaObject) {
-                copyList.add(wrapAsJavaObject(cx, mScope, obj, obj.getClass()));
+                final Class klass = obj != null ? obj.getClass() : null;
+                copyList.put(i, copyList, wrap(cx, scope, obj, klass));
+                i++;
             }
 
-            return new NativeList(scope, copyList);
+            return copyList;
+        } /*else if (javaObject instanceof String || javaObject instanceof Number || javaObject instanceof Boolean) {
+            return (Scriptable)Context.javaToJS(javaObject, scope);
         } else if (javaObject == null) {
             return null;
-        }
+        }*/
 
-        return super.wrapAsJavaObject(cx, mScope, javaObject, staticType);
+        final Scriptable ret = super.wrapAsJavaObject(cx, scope, javaObject, staticType);
+        return ret;
     }
 }
+

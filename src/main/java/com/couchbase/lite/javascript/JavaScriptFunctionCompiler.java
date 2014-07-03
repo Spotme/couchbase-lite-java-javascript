@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
+import org.mozilla.javascript.Callable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -19,6 +20,7 @@ import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
 import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
 import org.mozilla.javascript.commonjs.module.Require;
@@ -35,6 +37,7 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -107,9 +110,10 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	public void buildRequestObject() {
 
 		final String requestMethod = mConnection.getRequestMethod();
-		final String[] path = mConnection.getURL().getPath().split("/");
+		//final String[] path = mConnection.getURL().getPath().split("/")
+        final ArrayList<String> path = new ArrayList<String>(Arrays.asList(mConnection.getURL().getPath().split("/")));
 
-		final Map<String, Object> queryParams = new HashMap<String, Object>();
+        final Map<String, Object> queryParams = new HashMap<String, Object>();
 
 		try {
 			final List<NameValuePair> items = URLEncodedUtils.parse(mConnection.getURL().toURI(), "UTF-8");
@@ -298,10 +302,11 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
             // compile the list function and call it
             final Function listFunc = mContext.compileFunction(mScope, listSrc, listName, 1, null);
-            listFunc.call(mContext, mScope, mScope, new Object[] {
+            final Object[] params = new Object[] {
                     wrapper.wrapNewObject(mContext, mScope, head),
                     wrapper.wrapNewObject(mContext, mScope, requestProperties)
-            });
+            };
+            listFunc.call(mContext, mScope, mScope, params);
 
             Context.exit();
 
@@ -372,7 +377,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 	///////////////////////////////////// FunctionContainer
     class JavaScriptFunctionContainer extends ImporterTopLevel {
-
+        private final ObjectMapper mMapper = new ObjectMapper();
         public JavaScriptFunctionContainer() { }
 
         public JavaScriptFunctionContainer(Context cx) {
@@ -392,9 +397,20 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		public Object getRow() {
 			final WrapFactory wrapper = mContext.getWrapFactory();
 
-			return ++mCurrentListIndex < mItems.size()
-					? wrapper.wrapNewObject(mContext, mScope, mItems.get(mCurrentListIndex))
-					: null;
+            Object row = null;
+            ++mCurrentListIndex;
+            if (mCurrentListIndex < mItems.size()   ) {
+                Object item = mItems.get(mCurrentListIndex);
+                row = wrapper.wrapNewObject(mContext, mScope, item);
+            } else {
+                row = mContext.getUndefinedValue();
+            }
+            Log.d(Database.TAG, mCurrentListIndex + ": " + row.toString());
+            return row;
+
+//			return ++mCurrentListIndex < mItems.size()
+//					? wrapper.wrapNewObject(mContext, mScope, mItems.get(mCurrentListIndex))
+//					: null;
 		}
 
 		/**
