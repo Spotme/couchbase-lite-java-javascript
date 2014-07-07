@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeArray;
+import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.WrapFactory;
@@ -136,7 +137,11 @@ class ViewMapBlockRhino implements Mapper {
                 if (mapResultItem != null && mapResultItem.getLength() == 2) {
                     Object key = mapResultItem.get(0);
                     Object value = mapResultItem.get(1);
-                    emitter.emit(key, value);
+
+                    String keyJSON = (String)NativeJSON.stringify(ctx, globalScope, key, null, null);
+                    String valueJSON = (String)NativeJSON.stringify(ctx, globalScope, value, null, null);
+
+                    emitter.emitJSON(keyJSON, valueJSON);
                 } else {
                     Log.e(Database.TAG, "Expected 2 element array with key and value");
                 }
