@@ -43,22 +43,22 @@ class CustomWrapFactory extends WrapFactory {
     @Override
     public Scriptable wrapAsJavaObject(Context cx, Scriptable scope, Object javaObject, Class staticType) {
         if (javaObject instanceof Map) {
-            final NativeObject nativeObject = new NativeObject();
+            final NativeObject nativeObject = (NativeObject)cx.newObject(scope);
 
             for (Map.Entry<String, Object> entry : ((Map<String, Object>) javaObject).entrySet()) {
                 final String key = entry.getKey();
                 final Object value = entry.getValue();
                 final Class<?> valueClass = (value != null) ? value.getClass() : null;
 
-                final String nativeKey = key;//entry.getKey();
+                final String nativeKey = key;
                 final Object nativeValue = wrap(cx, scope, value, valueClass);
 
-                nativeObject.defineProperty(nativeKey, nativeValue, NativeObject.READONLY);
+                nativeObject.defineProperty(nativeKey, nativeValue, NativeObject.PERMANENT);
             }
 
             return nativeObject;
         } else if (javaObject instanceof List || javaObject instanceof Array) {
-            final NativeArray copyList = new NativeArray(((List) javaObject).size());
+            final NativeArray copyList = (NativeArray) cx.newArray(scope, ((List) javaObject).size());
 
             int i = 0;
             for (final Object obj : (List<Object>) javaObject) {
@@ -68,11 +68,7 @@ class CustomWrapFactory extends WrapFactory {
             }
 
             return copyList;
-        } /*else if (javaObject instanceof String || javaObject instanceof Number || javaObject instanceof Boolean) {
-            return (Scriptable)Context.javaToJS(javaObject, scope);
-        } else if (javaObject == null) {
-            return null;
-        }*/
+        }
 
         final Scriptable ret = super.wrapAsJavaObject(cx, scope, javaObject, staticType);
         return ret;
