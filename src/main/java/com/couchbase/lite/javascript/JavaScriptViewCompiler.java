@@ -17,6 +17,8 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.WrapFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -148,8 +150,17 @@ class ViewMapBlockRhino implements Mapper {
 class ViewReduceBlockRhino implements Reducer {
 
     private final Scriptable globalScope;
-
     private final WrapFactory wrapFactory;
+    private final String source;
+    private boolean isBuiltIn = false;
+
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    private static final List<String> builtIn = new ArrayList<String>() {{
+        add("_sum");
+        add("_count");
+        add("_stats");
+    }};
 
     public ViewReduceBlockRhino(String src) {
         final Context ctx = Context.enter();
@@ -157,15 +168,22 @@ class ViewReduceBlockRhino implements Reducer {
         // Android dex won't allow us to create our own classes
         ctx.setOptimizationLevel(-1);
 
+        mapper.getFactory().enable(JsonGenerator.Feature.ESCAPE_NON_ASCII);
+
         globalScope = ctx.initStandardObjects(null, true);
         wrapFactory = new CustomWrapFactory(globalScope);
+        source = src;
 
         ctx.setWrapFactory(wrapFactory);
 
         try {
-            // register the reduce function
-            final String reduceSrc = "var reduce = " + src + ";";
-            ctx.evaluateString(globalScope, reduceSrc, "reduce", 1, null);
+            if (!builtIn.contains(src)) {
+                // register the reduce function
+                final String reduceSrc = "var reduce = " + src + ";";
+                ctx.evaluateString(globalScope, reduceSrc, "reduce", 1, null);
+            } else {
+                isBuiltIn = true;
+            }
         } finally {
             Context.exit();
         }
@@ -178,13 +196,44 @@ class ViewReduceBlockRhino implements Reducer {
             ctx.setOptimizationLevel(-1);
             ctx.setWrapFactory(wrapFactory);
 
-            // find the reduce function and execute it
-            Function reduceFun = (Function) globalScope.get("reduce", globalScope);
-            Object[] functionArgs = { keys, values, rereduce };
+            if (isBuiltIn) {
+                if (source.equalsIgnoreCase("_sum")) return sum(keys, values, rereduce);
+                else if (source.equalsIgnoreCase("_count")) return count(keys, values, rereduce);
+                else if (source.equalsIgnoreCase("_stats")) return stats(keys, values, rereduce);
+            } else {
+                // find the reduce function and execute it
+                Function reduceFun = (Function) globalScope.get("reduce", globalScope);
+                Object[] functionArgs = {keys, values, rereduce};
 
-            return reduceFun.call(ctx, globalScope, globalScope, functionArgs);
+                return reduceFun.call(ctx, globalScope, globalScope, functionArgs);
+            }
+        } catch (Exception e) {
+            Log.e(Database.TAG, "Error while executing reduce function: " + source, e);
         } finally {
             Context.exit();
         }
+
+        return null;
+    }
+
+    protected Object sum(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
+        // not really sure?
+        return values.size();
+    }
+
+    protected Object count(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
+        return (rereduce) ? sum(keys, values, rereduce) : values.size();
+    }
+
+    protected Object stats(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
+        final Map<String, Object> props = new HashMap<String, Object>();
+
+        props.put("sum", sum(keys, values, rereduce));
+        props.put("count", count(keys, values, rereduce));
+        props.put("min", 0);
+        props.put("max", 1);
+        props.put("sumsqr", 0);
+
+        return mapper.writeValueAsString(props);
     }
 }
