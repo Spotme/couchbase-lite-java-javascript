@@ -208,8 +208,11 @@ class ViewReduceBlockRhino implements Reducer {
             } else {
                 // find the reduce function and execute it
                 Function reduceFun = (Function) globalScope.get("reduce", globalScope);
-                Object[] functionArgs = {keys, values, rereduce};
-
+                Object[] functionArgs = {
+                    wrapFactory.wrapNewObject(ctx, globalScope, keys),
+                    wrapFactory.wrapNewObject(ctx, globalScope, values),
+                    wrapFactory.wrapNewObject(ctx, globalScope, rereduce)
+                };
                 return reduceFun.call(ctx, globalScope, globalScope, functionArgs);
             }
         } catch (Exception e) {
