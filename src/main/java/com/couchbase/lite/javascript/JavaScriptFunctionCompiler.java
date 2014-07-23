@@ -3,6 +3,7 @@ package com.couchbase.lite.javascript;
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.FunctionCompiler;
+import com.couchbase.lite.FunctionContainer;
 import com.couchbase.lite.Status;
 import com.couchbase.lite.router.URLConnection;
 import com.couchbase.lite.util.Log;
@@ -11,31 +12,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
-import org.mozilla.javascript.Callable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
-import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
 import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
 import org.mozilla.javascript.commonjs.module.Require;
 import org.mozilla.javascript.commonjs.module.RequireBuilder;
-import org.mozilla.javascript.commonjs.module.provider.ModuleSource;
 import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
-import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProviderBase;
 import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-import java.lang.reflect.Member;
 import java.lang.reflect.Method;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -283,7 +275,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             registerFunctions(mListFunctions);
 
             try {
-                final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider();
+                final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider(mDesignDoc);
                 final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
                 final RequireBuilder builder = new RequireBuilder();
 
@@ -376,17 +368,11 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	}
 
 	///////////////////////////////////// FunctionContainer
-    class JavaScriptFunctionContainer extends ImporterTopLevel {
+    class JavaScriptFunctionContainer extends ImporterTopLevel implements FunctionContainer {
         private final ObjectMapper mMapper = new ObjectMapper();
-        public JavaScriptFunctionContainer() { }
 
         public JavaScriptFunctionContainer(Context cx) {
             super(cx);
-        }
-
-        public JavaScriptFunctionContainer(Context cx, boolean sealed)
-        {
-            super(cx, sealed);
         }
 
 		/**
@@ -401,7 +387,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             ++mCurrentListIndex;
             if (mCurrentListIndex < mItems.size()   ) {
                 Object item = mItems.get(mCurrentListIndex);
-                row = wrapper.wrapNewObject(mContext, mScope, item);
+                row = wrapper.wrapNewObject(mContext, this, item);
                 //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
             } else {
                 row = mContext.getUndefinedValue();
@@ -427,7 +413,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 * @return The object that can be evaluated into a {@link org.mozilla.javascript.Context} object
 		 */
 		public Object getJSON() {
-			return mScope.get("JSON", mScope);
+			return get("JSON", this);
 		}
 
 		/**
@@ -450,54 +436,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 * @return The function definition that can be evaluated into a {@link org.mozilla.javascript.Context} object
 		 */
 		public String toJSON(final Object obj) {
-			return (String) NativeJSON.stringify(mContext, mScope, obj, null, null);
+			return (String) NativeJSON.stringify(mContext, this, obj, null, null);
 		}
 	}
-
-    /**
-     * Handles functions with a fixed scope (the top-level one)
-     */
-    private static class FixedScopeFunctionObject extends FunctionObject {
-
-        private final Scriptable mFixedScope;
-
-        private FixedScopeFunctionObject(String name, Member methodOrConstructor, Scriptable parentScope, Scriptable fixedScope) {
-            super(name, methodOrConstructor, parentScope);
-
-            mFixedScope = fixedScope;
-        }
-
-        @Override
-        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-            return super.call(cx, scope, mFixedScope, args);
-        }
-    }
-
-	class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
-		@Override
-		public ModuleSource loadSource(String moduleId, Scriptable paths, Object validator) throws IOException, URISyntaxException {
-			return getModule(moduleId, validator);
-		}
-
-		@Override
-		protected ModuleSource loadFromUri(URI uri, URI base, Object validator) throws IOException, URISyntaxException {
-			return getModule(uri.toString(), validator);
-		}
-
-		protected ModuleSource getModule(String moduleId, Object validator) throws IOException {
-			try {
-				final String[] parts = moduleId.split("/");
-
-				Object currentObject = mDesignDoc;
-				for (final String part : parts) {
-					currentObject = ((Map<String, Object>) currentObject).get(part);
-				}
-
-				final Reader srcReader = new StringReader((String) currentObject);
-				return new ModuleSource(srcReader, null, new URI(moduleId).resolve(""), new URI(moduleId), validator);
-			} catch (Exception e) {
-				throw new IOException(e);
-			}
-		}
-	};
 }
