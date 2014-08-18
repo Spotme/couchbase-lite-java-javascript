@@ -63,7 +63,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	protected Map<String, Object> mRequestProperties;
 
 	// response contents
-	protected final StringBuilder mResponse = new StringBuilder();
+	protected final StringBuilder mListResponse = new StringBuilder();
 
 	// global shared scope with initialized functions
 	protected final ScriptableObject mScope;
@@ -312,7 +312,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		        resultString = mMapper.writeValueAsString(listFuncResult);
 	        }
 
-            return mResponse.append(resultString).toString() + "\n";
+            return mListResponse.append(resultString).toString();
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
@@ -375,7 +375,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 			}
 
 			//TODO check why we need StringBuilder here?
-			return mResponse.append(resultString).toString();
+			return resultString;
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + showSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
@@ -445,7 +445,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 * @inheritDoc
 		 */
 		public void send(final String contents) {
-			mResponse.append(contents);
+			mListResponse.append(contents);
 		}
 
 		/**
