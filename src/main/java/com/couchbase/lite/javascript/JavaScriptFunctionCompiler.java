@@ -353,11 +353,19 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 			// compile the show function and call it
 			final Function showFunc = mContext.compileFunction(mScope, showSrc, showName, 1, null);
-			final Object result = showFunc.call(mContext, mScope, mScope, new Object[] { document, requestProperties });
+			final Object showFuncResult = showFunc.call(mContext, mScope, mScope, new Object[] { document, requestProperties });
 
 			Context.exit();
 
-			return mResponse.append(mMapper.writeValueAsString(result)).toString();
+			final String resultString;
+			if (showFuncResult instanceof String) {
+				resultString = (String) showFuncResult;
+			} else { //TODO Check how could we have not a String here
+				resultString = mMapper.writeValueAsString(showFuncResult);
+			}
+
+			//TODO check why we need StringBuilder here?
+			return mResponse.append(resultString).toString();
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + showSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
