@@ -19,6 +19,7 @@ import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
 import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
 import org.mozilla.javascript.commonjs.module.Require;
@@ -298,11 +299,20 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
                     wrapper.wrapNewObject(mContext, mScope, head),
                     wrapper.wrapNewObject(mContext, mScope, requestProperties)
             };
-            listFunc.call(mContext, mScope, mScope, params);
+	        final Object listFuncResult = listFunc.call(mContext, mScope, mScope, params);
 
-            Context.exit();
+	        Context.exit();
 
-            return mResponse.toString() + "\n";
+	        final String resultString;
+	        if (listFuncResult instanceof Undefined) { //was no return
+		        resultString = "";
+	        } else if (listFuncResult instanceof String) {
+	            resultString = (String) listFuncResult;
+	        } else { //XXX: Check if we could have not a String here
+		        resultString = mMapper.writeValueAsString(listFuncResult);
+	        }
+
+            return mResponse.append(resultString).toString() + "\n";
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
