@@ -377,10 +377,10 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 			//TODO check why we need StringBuilder here?
 			return resultString;
 		} catch (EvaluatorException eval) {
-			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + showSrc, eval);
+			Log.e(Database.TAG, "Javascript syntax error in show function '" + mDesignDoc.get("_id") + "/" + showName + "-" + mDesignDoc.get("_rev") + "':\n" + showSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
 		} catch (Exception e) {
-			Log.e(Database.TAG, "Javascript error in list function:\n" + showSrc, e);
+			Log.e(Database.TAG, "Javascript error in show function: '" + mDesignDoc.get("_id") + "/" + showName + "-" + mDesignDoc.get("_rev")+ "'\n" + showSrc, e);
 			throw new CouchbaseLiteException(new Status(Status.BAD_REQUEST));
 		}
 	}
