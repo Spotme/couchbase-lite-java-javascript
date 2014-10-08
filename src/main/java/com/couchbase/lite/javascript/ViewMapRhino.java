@@ -9,6 +9,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.NativeJSON;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
 
 import java.lang.reflect.Method;
@@ -102,6 +103,8 @@ public class ViewMapRhino implements Mapper {
 		}
 
 		public void emit(Object key, Object value) {
+			if (value instanceof Undefined) value = null;
+
 			String keyJSON = (String) NativeJSON.stringify(mContext, mScope, key, null, null);
 			String valueJSON = (String) NativeJSON.stringify(mContext, mScope, value, null, null);
 
