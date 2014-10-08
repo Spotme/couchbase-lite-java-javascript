@@ -103,6 +103,7 @@ public class ViewMapRhino implements Mapper {
 		}
 
 		public void emit(Object key, Object value) {
+			if (key instanceof Undefined) key = null;
 			if (value instanceof Undefined) value = null;
 
 			String keyJSON = (String) NativeJSON.stringify(mContext, mScope, key, null, null);
