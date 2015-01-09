@@ -3,6 +3,7 @@ package com.couchbase.lite.javascript;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Emitter;
 import com.couchbase.lite.Mapper;
+import com.couchbase.lite.SpecialKey;
 import com.couchbase.lite.util.Log;
 
 import org.mozilla.javascript.Context;
@@ -48,6 +49,15 @@ public class ViewMapRhino implements Mapper {
 		} catch (NoSuchMethodException e) {
 			e.printStackTrace();
 		}
+
+        try {
+            final Method emitFtsMethod = mScope.getClass().getMethod("emit_fts", Object.class, Object.class);
+            final FunctionObject emitFtsFunction = new FixedScopeFunctionObject("emit_fts", emitFtsMethod, mScope, mScope);
+
+            mScope.put("emit_fts", mScope, emitFtsFunction);
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        }
 
 		//	    try {
 		//		    final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider(ddoc);
@@ -111,5 +121,15 @@ public class ViewMapRhino implements Mapper {
 
 			mEmitter.emitJSON(keyJSON, valueJSON);
 		}
+
+        public void emit_fts(Object key, Object value) {
+            if (key instanceof Undefined) key = null;
+            if (value instanceof Undefined) value = null;
+
+            String keyJSON = (String) NativeJSON.stringify(mContext, mScope, key, null, null);
+            String valueJSON = (String) NativeJSON.stringify(mContext, mScope, value, null, null);
+
+            mEmitter.emitJSON(new SpecialKey(keyJSON), valueJSON);
+        }
 	}
 }
