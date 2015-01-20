@@ -12,6 +12,11 @@ import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
+import org.mozilla.javascript.commonjs.module.ModuleScriptProvider;
+import org.mozilla.javascript.commonjs.module.Require;
+import org.mozilla.javascript.commonjs.module.RequireBuilder;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
+import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -29,8 +34,11 @@ public class ViewMapRhino implements Mapper {
 
 	private Emitter mEmitter;
 
-	public ViewMapRhino(String src) {
+	protected Map<String, Object> mDesignDoc;
+
+	public ViewMapRhino(String src, Map<String, Object> ddoc) {
 		mapSrc = src;
+		mDesignDoc = ddoc;
 
 		mContext = Context.enter();
 
@@ -59,21 +67,21 @@ public class ViewMapRhino implements Mapper {
             e.printStackTrace();
         }
 
-		//	    try {
-		//		    final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider(ddoc);
-		//		    final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
-		//		    final RequireBuilder builder = new RequireBuilder();
-		//
-		//		    builder.setModuleScriptProvider(scriptProvider);
-		//
-		//		    final Require require = builder.createRequire(ctx, mScope);
-		//
-		//		    require.setParentScope(mScope);
-		//		    require.setPrototype(mScope);
-		//		    require.install(mScope);
-		//	    } catch (Exception e) {
-		//		    Log.e(Database.TAG, "Unable to load require function!", e);
-		//	    }
+		try {
+			final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider(mDesignDoc);
+			final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
+			final RequireBuilder builder = new RequireBuilder();
+
+			builder.setModuleScriptProvider(scriptProvider);
+
+			final Require require = builder.createRequire(mContext, mScope);
+
+			require.setParentScope(mScope);
+			require.setPrototype(mScope);
+			require.install(mScope);
+		} catch (Exception e) {
+			Log.e(Database.TAG, "Unable to load require function!", e);
+		}
 
 		try {
 			mMapFunction = mContext.compileFunction(mScope, mapSrc, "map", 1, null); // compile the map function
@@ -89,6 +97,9 @@ public class ViewMapRhino implements Mapper {
 	@Override
 	public void map(Map<String, Object> document, Emitter emitter) {
 		mContext = Context.enter();
+		// Android dex won't allow us to create our own classes
+		mContext.setOptimizationLevel(-1);
+
 		mEmitter = emitter;
 
 		try {
