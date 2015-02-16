@@ -18,6 +18,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
+import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
@@ -32,6 +33,7 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +69,8 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 	// global shared scope with initialized functions
 	protected final ScriptableObject mScope;
+
+    public long getRowDuration;
 
 	// JS query server functions
 	protected static final List<String> mGlobalFunctions = Arrays.asList("isArray", "log", "sum", "start");
@@ -264,6 +268,8 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	public String list(final String listName, final Map<String, Object> head) throws CouchbaseLiteException {
         if (mDesignDoc == null) return null;
 
+        Date d1 = new Date();
+        Log.i(Log.TAG_VIEW, "Executing list function %s", listName);
         final Map<String, Object> requestProperties = getRequestProperties();
         final WrapFactory wrapper = mContext.getWrapFactory();
 
@@ -292,7 +298,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
             }
 
             listSrc = (String) ((Map<String, Object>) mDesignDoc.get("lists")).get(listName);
-
+            getRowDuration = 0;
             // compile the list function and call it
             final Function listFunc = mContext.compileFunction(mScope, listSrc, listName, 1, null);
             final Object[] params = new Object[] {
@@ -300,6 +306,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
                     wrapper.wrapNewObject(mContext, mScope, requestProperties)
             };
 	        final Object listFuncResult = listFunc.call(mContext, mScope, mScope, params);
+            Date d2 = new Date();
 
 	        Context.exit();
 
@@ -307,11 +314,17 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	        if (listFuncResult instanceof Undefined) { //was no return
 		        resultString = "";
 	        } else if (listFuncResult instanceof String) {
-	            resultString = (String) listFuncResult;
+                resultString = (String) listFuncResult;
+            } else if (listFuncResult instanceof NativeObject) {
+                Object json = ((NativeObject)listFuncResult).get("json");
+                resultString = mMapper.writeValueAsString(json);
 	        } else { //XXX: Check if we could have not a String here
+                //Log.e("victor", "TU PEUX PAS TEST");
 		        resultString = mMapper.writeValueAsString(listFuncResult);
 	        }
 
+            Date d3 = new Date();
+            Log.i(Log.TAG_VIEW, "... Finished executing list function %s, took %s ms, getRow took %s ms, JSON conversion took %s ms", listName, (d3.getTime() - d1.getTime()), getRowDuration, (d3.getTime() - d2.getTime()));
             return mListResponse.append(resultString).toString();
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
@@ -402,15 +415,29 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 			final WrapFactory wrapper = mContext.getWrapFactory();
 
             Object row = null;
-            ++mCurrentListIndex;
-            if (mCurrentListIndex < mItems.size()   ) {
-                Object item = mItems.get(mCurrentListIndex);
+//            ++mCurrentListIndex;
+//            if (mCurrentListIndex < mItems.size()   ) {
+//                Object item = mItems.get(mCurrentListIndex);
+//                row = wrapper.wrapNewObject(mContext, this, item);
+//
+//                //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
+//            } else {
+//                row = mContext.getUndefinedValue();
+//                //Log.d(Database.TAG, mCurrentListIndex + ": " +  row.toString());
+//            }
+            Date d1 = new Date();
+            if (mItems.size() > 0) {
+                Object item = mItems.remove(0);
                 row = wrapper.wrapNewObject(mContext, this, item);
+
                 //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
             } else {
                 row = mContext.getUndefinedValue();
                 //Log.d(Database.TAG, mCurrentListIndex + ": " +  row.toString());
             }
+            Date d2 = new Date();
+
+            getRowDuration = getRowDuration + (d2.getTime() - d1.getTime());
 
             return row;
 		}
