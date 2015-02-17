@@ -265,7 +265,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	/**
 	 * @inheritDoc
 	 */
-	public String list(final String listName, final Map<String, Object> head) throws CouchbaseLiteException {
+	public Object list(final String listName, final Map<String, Object> head) throws CouchbaseLiteException {
         if (mDesignDoc == null) return null;
 
         Date d1 = new Date();
@@ -310,22 +310,28 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
 	        Context.exit();
 
-	        final String resultString;
+            Object ret = null;
+
+	        String resultString = null;
 	        if (listFuncResult instanceof Undefined) { //was no return
 		        resultString = "";
 	        } else if (listFuncResult instanceof String) {
                 resultString = (String) listFuncResult;
             } else if (listFuncResult instanceof NativeObject) {
                 Object json = ((NativeObject)listFuncResult).get("json");
-                resultString = mMapper.writeValueAsString(json);
+                ret = json;
+//                resultString = mMapper.writeValueAsString(json);
 	        } else { //XXX: Check if we could have not a String here
-                //Log.e("victor", "TU PEUX PAS TEST");
 		        resultString = mMapper.writeValueAsString(listFuncResult);
 	        }
 
+            if (ret == null) {
+                ret = mListResponse.append(resultString).toString();
+            }
+
             Date d3 = new Date();
             Log.i(Log.TAG_VIEW, "... Finished executing list function %s, took %s ms, getRow took %s ms, JSON conversion took %s ms", listName, (d3.getTime() - d1.getTime()), getRowDuration, (d3.getTime() - d2.getTime()));
-            return mListResponse.append(resultString).toString();
+            return ret;
 		} catch (EvaluatorException eval) {
 			Log.e(Database.TAG, "Javascript syntax error in list function:\n" + listSrc, eval);
 			throw new CouchbaseLiteException(new Status(Status.INTERNAL_SERVER_ERROR));
