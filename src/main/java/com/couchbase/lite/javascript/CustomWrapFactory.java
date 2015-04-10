@@ -31,7 +31,7 @@ import java.util.Map;
 /**
  * Wrap Factory for Rhino Script Engine
  */
-class CustomWrapFactory extends WrapFactory {
+public class CustomWrapFactory extends WrapFactory {
 
     private final Scriptable mScope;
 
