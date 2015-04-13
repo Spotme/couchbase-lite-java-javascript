@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * Handles imports from a design document itself
  */
-class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
+public class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
 
 	protected final Map<String, Object> mDesignDoc;
 
