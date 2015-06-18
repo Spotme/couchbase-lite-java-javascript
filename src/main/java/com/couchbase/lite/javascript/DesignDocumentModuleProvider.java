@@ -2,7 +2,7 @@ package com.couchbase.lite.javascript;
 
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.commonjs.module.provider.ModuleSource;
-import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProviderBase;
+import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -12,10 +12,9 @@ import java.net.URISyntaxException;
 import java.util.Map;
 
 /**
- * Handles imports from a design document itself
+ *  Handles require() (imports) from JS code of list/map, using other JS functions from the same design document.
  */
-public class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
-
+public class DesignDocumentModuleProvider implements ModuleSourceProvider {
 	protected final Map<String, Object> mDesignDoc;
 
 	public DesignDocumentModuleProvider(final Map<String, Object> ddoc) {
@@ -27,10 +26,10 @@ public class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
 		return getModule(moduleId, validator);
 	}
 
-	@Override
-	protected ModuleSource loadFromUri(URI uri, URI base, Object validator) throws IOException, URISyntaxException {
-		return getModule(uri.toString(), validator);
-	}
+    @Override
+    public ModuleSource loadSource(URI uri, URI baseUri, Object validator) throws IOException, URISyntaxException {
+        return getModule(uri.toString(), validator);
+    }
 
 	protected ModuleSource getModule(String moduleId, Object validator) throws IOException {
 		try {
@@ -44,7 +43,7 @@ public class DesignDocumentModuleProvider extends ModuleSourceProviderBase {
 			final Reader srcReader = new StringReader((String) currentObject);
 			return new ModuleSource(srcReader, null, new URI(moduleId).resolve(""), new URI(moduleId), validator);
 		} catch (Exception e) {
-			throw new IOException(e);
+			throw new IOException("Unable to perform 'require()' for module id: " + moduleId, e);
 		}
 	}
 };
