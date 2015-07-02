@@ -62,11 +62,7 @@ public class ViewReduceRhino implements Reducer {
 
 	@Override
 	public Object reduce(List<Object> keys, List<Object> values, boolean rereduce) {
-		Context ctx = Context.enter();
 		try {
-			ctx.setOptimizationLevel(-1);
-			ctx.setWrapFactory(wrapFactory);
-
 			if (isBuiltIn) {
 				if (source.equalsIgnoreCase("_sum")) return sum(keys, values, rereduce);
 				else if (source.equalsIgnoreCase("_count"))
@@ -74,18 +70,32 @@ public class ViewReduceRhino implements Reducer {
 				else if (source.equalsIgnoreCase("_stats"))
 					return stats(keys, values, rereduce);
 			} else {
-				Object[] functionArgs = { // execute the reduce func with the args
-						wrapFactory.wrapNewObject(ctx, globalScope, keys),
-						wrapFactory.wrapNewObject(ctx, globalScope, values),
-						wrapFactory.wrapNewObject(ctx, globalScope, rereduce)
-				};
+                org.mozilla.javascript.Context ctx = org.mozilla.javascript.Context.enter();
+                try {
+                    ctx.setOptimizationLevel(-1);
+                    ctx.setWrapFactory(wrapFactory);
 
-				return mReduceFunc.call(ctx, globalScope, globalScope, functionArgs);
+                    Scriptable localScope = ctx.newObject(globalScope);
+                    localScope.setPrototype(globalScope);
+                    localScope.setParentScope(null);
+
+                    Object[] args = new Object[3];
+
+                    args[0] = org.mozilla.javascript.Context.javaToJS(keys, localScope);
+                    args[1] = org.mozilla.javascript.Context.javaToJS(values, localScope);
+                    args[2] = org.mozilla.javascript.Context.javaToJS(rereduce, localScope);
+
+                    return mReduceFunc.call(ctx, localScope, null, args);
+
+                } catch (org.mozilla.javascript.RhinoException e) {
+                    // TODO check couchdb behaviour on error in reduce function
+                    return null;
+                } finally {
+                    org.mozilla.javascript.Context.exit();
+                }
 			}
 		} catch (Exception e) {
 			Log.e(Database.TAG, "Error while executing reduce function: " + source, e);
-		} finally {
-			Context.exit();
 		}
 
 		return null;
