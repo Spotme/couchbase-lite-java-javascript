@@ -22,6 +22,7 @@ import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
 import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 
 public class ViewMapRhino implements Mapper {
@@ -36,6 +37,9 @@ public class ViewMapRhino implements Mapper {
 	private Emitter mEmitter;
 
 	protected Map<String, Object> mDesignDoc;
+
+
+    protected Map<Long, Long> sequences = new HashMap<>();
 
 
     static class MyFactory extends ContextFactory
@@ -115,11 +119,12 @@ public class ViewMapRhino implements Mapper {
 	}
 
 	@Override
-	public void map(final Map<String, Object> document, final Emitter emitter) {
+	public void map(final Map<String, Object> document, final Emitter emitter, final long sequence) {
         Context cx = Context.enter();
         // Android dex won't allow us to create our own classes
         cx.setOptimizationLevel(-1);
 
+        sequences.put(Thread.currentThread().getId(), sequence);
         mEmitter = emitter;
 
         Scriptable threadScope = cx.newObject(mSharedScope);
@@ -164,7 +169,7 @@ public class ViewMapRhino implements Mapper {
                 e.printStackTrace();
             }
 
-			mEmitter.emitJSON(keyJson, valueJson);
+			mEmitter.emitJSON(keyJson, valueJson, sequences.get(Thread.currentThread().getId()));
             return true;
 		}
 
@@ -185,7 +190,7 @@ public class ViewMapRhino implements Mapper {
                 e.printStackTrace();
             }
 
-            mEmitter.emitJSON(new SpecialKey(keyJson), valueJson);
+            mEmitter.emitJSON(new SpecialKey(keyJson), valueJson, sequences.get(Thread.currentThread().getId()));
         }
 	}
 }
