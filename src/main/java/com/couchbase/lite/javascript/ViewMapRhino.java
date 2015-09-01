@@ -23,6 +23,7 @@ import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptPr
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ViewMapRhino implements Mapper {
@@ -37,6 +38,8 @@ public class ViewMapRhino implements Mapper {
 	private Emitter mEmitter;
 
 	protected Map<String, Object> mDesignDoc;
+
+    protected Context mContext;
 
 
     protected Map<Long, Long> sequences = new HashMap<>();
@@ -64,14 +67,14 @@ public class ViewMapRhino implements Mapper {
         mapSrc = src;
         mDesignDoc = ddoc;
 
-        Context context = Context.enter();
+        mContext = Context.enter();
 
         mSharedScope = new MapperFunctionContainer(Context.getCurrentContext(), true);
         mWrapFactory = new CustomWrapFactory(mSharedScope);
 
         // Android dex won't allow us to create our own classes
-        context.setOptimizationLevel(-1);
-        context.setWrapFactory(mWrapFactory);
+        mContext.setOptimizationLevel(-1);
+        mContext.setWrapFactory(mWrapFactory);
 
         try {
             final Method emitMethod = mSharedScope.getClass().getMethod("emit", Object.class, Object.class);
@@ -92,13 +95,22 @@ public class ViewMapRhino implements Mapper {
         }
 
         try {
+            final Method isArray = mSharedScope.getClass().getMethod("isArray", Object.class, Object.class);
+            final FunctionObject isArrayFunction = new FixedScopeFunctionObject("isArray", isArray, mSharedScope, mSharedScope);
+
+            mSharedScope.put("isArray", mSharedScope, isArrayFunction);
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        }
+
+        try {
             final ModuleSourceProvider sourceProvider = new DesignDocumentModuleProvider(mDesignDoc);
             final ModuleScriptProvider scriptProvider = new SoftCachingModuleScriptProvider(sourceProvider);
             final RequireBuilder builder = new RequireBuilder();
 
             builder.setModuleScriptProvider(scriptProvider);
 
-            final Require require = builder.createRequire(context, mSharedScope);
+            final Require require = builder.createRequire(mContext, mSharedScope);
 
             require.setParentScope(mSharedScope);
             require.setPrototype(mSharedScope);
@@ -108,7 +120,7 @@ public class ViewMapRhino implements Mapper {
         }
 
         try {
-            mMapFunction = context.compileFunction(mSharedScope, mapSrc, "map", 1, null); // compile the map function
+            mMapFunction = mContext.compileFunction(mSharedScope, mapSrc, "map", 1, null); // compile the map function
         } catch (org.mozilla.javascript.EvaluatorException e) {
             // Error in the JavaScript view - CouchDB swallows  the error and tries the next document
             Log.e(Database.TAG, "Javascript syntax error in view:\n" + src, e);
@@ -139,7 +151,7 @@ public class ViewMapRhino implements Mapper {
             mMapFunction.call(cx, threadScope, threadScope, args);
         } catch (org.mozilla.javascript.RhinoException e) {
             // Error in the JavaScript view - CouchDB swallows the error and tries the next document
-            Log.e(Database.TAG, "Error in javascript view:\n" + mapSrc + "\n with document:\n" + document, e);
+            Log.e(Database.TAG, "Error in javascript view " + e.getMessage() +",\n" + mapSrc + "\n with document:\n" + document, e);
             return;
         }
 
@@ -191,6 +203,15 @@ public class ViewMapRhino implements Mapper {
             }
 
             mEmitter.emitJSON(new SpecialKey(keyJson), valueJson, sequences.get(Thread.currentThread().getId()));
+        }
+
+        public boolean isArray(final Object obj) {
+            try {
+                final Object result = mContext.jsToJava(obj, List.class);
+                return result instanceof List;
+            } catch (ClassCastException e) {
+                return false;
+            }
         }
 	}
 }
