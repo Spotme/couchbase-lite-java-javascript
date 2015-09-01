@@ -95,7 +95,7 @@ public class ViewMapRhino implements Mapper {
         }
 
         try {
-            final Method isArray = mSharedScope.getClass().getMethod("isArray", Object.class, Object.class);
+            final Method isArray = mSharedScope.getClass().getMethod("isArray", Object.class);
             final FunctionObject isArrayFunction = new FixedScopeFunctionObject("isArray", isArray, mSharedScope, mSharedScope);
 
             mSharedScope.put("isArray", mSharedScope, isArrayFunction);
@@ -203,15 +203,6 @@ public class ViewMapRhino implements Mapper {
             }
 
             mEmitter.emitJSON(new SpecialKey(keyJson), valueJson, sequences.get(Thread.currentThread().getId()));
-        }
-
-        public boolean isArray(final Object obj) {
-            try {
-                final Object result = mContext.jsToJava(obj, List.class);
-                return result instanceof List;
-            } catch (ClassCastException e) {
-                return false;
-            }
         }
 	}
 }
