@@ -21,9 +21,7 @@ dependencies {
     // because of a "compile" directive to explicitly include the jar.
     testCompile fileTree(dir: 'libs', include: 'td_collator_so.jar')
 
-    compile 'org.mozilla:rhino:1.7R4'
+//  Looks like, rhino dependency (1.7.7 with bind fix) is taken from java-core
 
     compile project(':cbl:java-core')
-
 }
-
