@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
@@ -23,7 +24,6 @@ import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptPr
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ViewMapRhino implements Mapper {
@@ -62,8 +62,10 @@ public class ViewMapRhino implements Mapper {
         ContextFactory.initGlobal(new MyFactory());
     }
 
-
-    public ViewMapRhino(final String src, final Map<String, Object> ddoc) {
+    /**
+     * @throws EvaluatorException when compileFunction() failed. Normally this means, that JS code is not valid/malformed.
+     */
+    public ViewMapRhino(final String src, final Map<String, Object> ddoc) throws EvaluatorException {
         mapSrc = src;
         mDesignDoc = ddoc;
 
@@ -119,13 +121,7 @@ public class ViewMapRhino implements Mapper {
             Log.e(Database.TAG, "Unable to load require function!", e);
         }
 
-        try {
-            mMapFunction = mContext.compileFunction(mSharedScope, mapSrc, "map", 1, null); // compile the map function
-        } catch (org.mozilla.javascript.EvaluatorException e) {
-            // Error in the JavaScript view - CouchDB swallows  the error and tries the next document
-            Log.e(Database.TAG, "Javascript syntax error in view:\n" + src, e);
-            return;
-        }
+        mMapFunction = mContext.compileFunction(mSharedScope, mapSrc, "map", 1, null); // compile the map function
 
         Context.exit();
 	}
