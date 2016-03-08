@@ -10,8 +10,6 @@ import com.couchbase.lite.util.Log;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.client.utils.URLEncodedUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -37,6 +35,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import cz.msebera.android.httpclient.NameValuePair;
+import cz.msebera.android.httpclient.client.utils.URLEncodedUtils;
 
 /**
  * A list and show JavaScript function compiler that provides the
