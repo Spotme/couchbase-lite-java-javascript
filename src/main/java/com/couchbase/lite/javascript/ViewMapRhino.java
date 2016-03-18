@@ -23,6 +23,7 @@ import org.mozilla.javascript.commonjs.module.provider.ModuleSourceProvider;
 import org.mozilla.javascript.commonjs.module.provider.SoftCachingModuleScriptProvider;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -42,7 +43,7 @@ public class ViewMapRhino implements Mapper {
     protected Context mContext;
 
 
-    protected Map<Long, Long> sequences = new HashMap<>();
+    protected Map<Long, Long> sequences = Collections.synchronizedMap(new HashMap<Long, Long>());
 
 
     static class MyFactory extends ContextFactory
