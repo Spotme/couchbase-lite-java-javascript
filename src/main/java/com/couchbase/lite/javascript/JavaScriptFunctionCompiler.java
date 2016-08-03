@@ -17,6 +17,7 @@ import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.NativeObject;
+import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
@@ -31,10 +32,14 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import cz.msebera.android.httpclient.NameValuePair;
 import cz.msebera.android.httpclient.client.utils.URLEncodedUtils;
@@ -45,8 +50,10 @@ import cz.msebera.android.httpclient.client.utils.URLEncodedUtils;
  */
 public class JavaScriptFunctionCompiler implements FunctionCompiler {
 
+    protected ExecutorService jsWrapperExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
 	// Items output by the view
-	protected List<Map<String, Object>> mItems;
+	protected List<Object> mItems;
 
 	// HTTP request that triggered this call
 	protected URLConnection mConnection;
@@ -143,48 +150,6 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		}
 
 		mRequestProperties = requestObj;
-
-//		{
-//		    "info": {
-//		        "db_name": "test_suite_db",
-//		        "doc_count": 11,
-//		        "doc_del_count": 0,
-//		        "update_seq": 11,
-//		        "purge_seq": 0,
-//		        "compact_running": false,
-//		        "disk_size": 4930,
-//		        "instance_start_time": "1250046852578425",
-//		        "disk_format_version": 4
-//		    },
-//		    "method": "GET",
-//		    "path": [
-//		        "test_suite_db",
-//		        "_design",
-//		        "lists",
-//		        "_list",
-//		        "basicJSON",
-//		        "basicView"
-//		    ],
-//		    "query": {
-//		        "foo": "bar"
-//		    },
-//		    "headers": {
-//		        "Accept": "text/html,application/xhtml+xml ,application/xml;q=0.9,*/*;q=0.8",
-//		        "Accept-Charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.7",
-//		        "Accept-Encoding": "gzip,deflate",
-//		        "Accept-Language": "en-us,en;q=0.5",
-//		        "Connection": "keep-alive",
-//		        "Cookie": "_x=95252s.sd25; AuthSession=",
-//		        "Host": "127.0.0.1:5984",
-//		        "Keep-Alive": "300",
-//		        "Referer": "http://127.0.0.1:5984/_utils/couch_tests.html?script/couch_tests.js",
-//		        "User-Agent": "Mozilla/5.0 Gecko/20090729 Firefox/3.5.2"
-//		    },
-//		    "cookie": {
-//		        "_x": "95252s.sd25",
-//		        "AuthSession": ""
-//		    }
-//		}
 	}
 
 	/**
@@ -257,8 +222,31 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	/**
 	 * @inheritDoc
 	 */
-	public void setViewResult(final Map<String, Object> result) {
-		mItems = (List<Map<String, Object>>) result.get("rows");
+	public void setViewResult(final List<Map<String, Object>> result) {
+        mItems = new ArrayList<>(Collections.nCopies(result.size(), null));
+        final WrapFactory wrapper = mContext.getWrapFactory();
+
+        Date d1 = new Date();
+        for (int i = 0; i < result.size(); i++) {
+            final int index = i;
+            final Map<String, Object> item = result.get(i);
+            jsWrapperExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    mItems.set(index, wrapper.wrapNewObject(mContext, mScope, item));
+                }
+            });
+        }
+
+        try {
+            jsWrapperExecutor.shutdown();
+            jsWrapperExecutor.awaitTermination(1, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        Date d2 = new Date();
+        Log.i(Log.TAG_VIEW, "Js object wrap took " + (d2.getTime()-d1.getTime()) + " ms");
 	}
 
 	///////////////////////////////////// FunctionCompiler
@@ -419,32 +407,16 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 		 * @return The next object in the current collection.
 		 */
 		public Object getRow() {
-			final WrapFactory wrapper = mContext.getWrapFactory();
-
             Object row = null;
-//            ++mCurrentListIndex;
-//            if (mCurrentListIndex < mItems.size()   ) {
-//                Object item = mItems.get(mCurrentListIndex);
-//                row = wrapper.wrapNewObject(mContext, this, item);
-//
-//                //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
-//            } else {
-//                row = mContext.getUndefinedValue();
-//                //Log.d(Database.TAG, mCurrentListIndex + ": " +  row.toString());
-//            }
-            Date d1 = new Date();
+            long d1 = System.currentTimeMillis();
             if (mItems.size() > 0) {
-                Object item = mItems.remove(0);
-                row = wrapper.wrapNewObject(mContext, this, item);
-
-                //Log.d(Database.TAG, mCurrentListIndex + ": " + item.toString() + " -> " + row.toString());
+                row = mItems.remove(0);
             } else {
                 row = mContext.getUndefinedValue();
-                //Log.d(Database.TAG, mCurrentListIndex + ": " +  row.toString());
             }
-            Date d2 = new Date();
+            long d2 = System.currentTimeMillis();
 
-            getRowDuration = getRowDuration + (d2.getTime() - d1.getTime());
+            getRowDuration = getRowDuration + (d2 - d1);
 
             return row;
 		}
