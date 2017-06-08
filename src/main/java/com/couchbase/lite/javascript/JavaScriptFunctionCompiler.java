@@ -223,30 +223,32 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	 * @inheritDoc
 	 */
 	public void setViewResult(final List<Map<String, Object>> result) {
-        mItems = new ArrayList<>(Collections.nCopies(result.size(), null));
-        final WrapFactory wrapper = mContext.getWrapFactory();
+		synchronized (mItems) {
+			mItems = new ArrayList<>(Collections.nCopies(result.size(), null));
+			final WrapFactory wrapper = mContext.getWrapFactory();
 
-        Date d1 = new Date();
-        for (int i = 0; i < result.size(); i++) {
-            final int index = i;
-            final Map<String, Object> item = result.get(i);
-            jsWrapperExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    mItems.set(index, wrapper.wrapNewObject(mContext, mScope, item));
-                }
-            });
-        }
+			Date d1 = new Date();
+			for (int i = 0; i < result.size(); i++) {
+				final int index = i;
+				final Map<String, Object> item = result.get(i);
+				jsWrapperExecutor.execute(new Runnable() {
+					@Override
+					public void run() {
+						mItems.set(index, wrapper.wrapNewObject(mContext, mScope, item));
+					}
+				});
+			}
 
-        try {
-            jsWrapperExecutor.shutdown();
-            jsWrapperExecutor.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+			try {
+				jsWrapperExecutor.shutdown();
+				jsWrapperExecutor.awaitTermination(1, TimeUnit.MINUTES);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 
-        Date d2 = new Date();
-        Log.i(Log.TAG_VIEW, "Js object wrap took " + (d2.getTime()-d1.getTime()) + " ms");
+			Date d2 = new Date();
+			Log.i(Log.TAG_VIEW, "Js object wrap took " + (d2.getTime()-d1.getTime()) + " ms");
+		}
 	}
 
 	///////////////////////////////////// FunctionCompiler
