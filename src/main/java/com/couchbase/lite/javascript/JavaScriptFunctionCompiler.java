@@ -223,7 +223,7 @@ public class JavaScriptFunctionCompiler implements FunctionCompiler {
 	 * @inheritDoc
 	 */
 	public void setViewResult(final List<Map<String, Object>> result) {
-		synchronized (mItems) {
+		synchronized (this) {
 			mItems = new ArrayList<>(Collections.nCopies(result.size(), null));
 			final WrapFactory wrapper = mContext.getWrapFactory();
 
