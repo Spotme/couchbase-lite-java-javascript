@@ -146,7 +146,7 @@ public class ViewMapRhino implements Mapper {
 
         try {
             mMapFunction.call(cx, threadScope, threadScope, args);
-        } catch (org.mozilla.javascript.RhinoException e) {
+        } catch (org.mozilla.javascript.RhinoException | NullPointerException e) {
             // Error in the JavaScript view - CouchDB swallows the error and tries the next document
             Log.e(Database.TAG, "Error in javascript view " + e.getMessage() +",\n" + mapSrc + "\n with document:\n" + document, e);
             return;
