@@ -7,8 +7,10 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrapFactory;
 
 import java.util.ArrayList;
@@ -102,8 +104,18 @@ public class ViewReduceRhino implements Reducer {
 	}
 
 	protected Object sum(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
-		// not really sure?
-		return values.size();
+		try {
+			double count = 0d;
+			for (Object value : values) {
+				final double doubleValue = (Double) Context.jsToJava(value, Double.TYPE);
+				count += doubleValue;
+			}
+			// not really sure?
+			return count;
+		} catch (EvaluatorException e) {
+			Log.e(Database.TAG, "Unable to execute _sum. Incoming values contains non-number: " + values, e);
+			return Undefined.instance;
+		}
 	}
 
 	protected Object count(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
