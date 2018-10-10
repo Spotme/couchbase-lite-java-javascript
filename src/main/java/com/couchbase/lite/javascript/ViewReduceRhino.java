@@ -106,10 +106,9 @@ public class ViewReduceRhino implements Reducer {
 	protected Object sum(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
 		double count = 0d;
 		for (Object value : values) {
-			final double doubleValue = (Double) Context.jsToJava(value, Double.TYPE);
+			final double doubleValue = (double) Context.jsToJava(value, Double.TYPE);
 			count += doubleValue;
 		}
-		// not really sure?
 		return count;
 	}
 
