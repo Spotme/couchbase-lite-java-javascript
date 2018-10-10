@@ -104,18 +104,13 @@ public class ViewReduceRhino implements Reducer {
 	}
 
 	protected Object sum(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
-		try {
-			double count = 0d;
-			for (Object value : values) {
-				final double doubleValue = (Double) Context.jsToJava(value, Double.TYPE);
-				count += doubleValue;
-			}
-			// not really sure?
-			return count;
-		} catch (EvaluatorException e) {
-			Log.e(Database.TAG, "Unable to execute _sum. Incoming values contains non-number: " + values, e);
-			return Undefined.instance;
+		double count = 0d;
+		for (Object value : values) {
+			final double doubleValue = (Double) Context.jsToJava(value, Double.TYPE);
+			count += doubleValue;
 		}
+		// not really sure?
+		return count;
 	}
 
 	protected Object count(List<Object> keys, List<Object> values, boolean rereduce) throws Exception {
